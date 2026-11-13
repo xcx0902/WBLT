@@ -123,6 +123,37 @@ void export_elements() {
     check_values(r, {26, 32, 23, 26});
 }
 
+void merge_many() {
+    Tree tree, other;
+    auto a = build(tree, {1, 2});
+    auto b = tree.singleton(element(9));
+    auto c = build(tree, {4, 5});
+    auto foreign = other.singleton(element(8));
+    Sequence empty;
+    a.apply({2, 3});
+
+    const auto check_rejected = [&](Sequence& last) {
+        bool rejected = false;
+        try {
+            tree.merge(std::move(a), std::move(b), std::move(last));
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        CHECK(rejected);
+        verify(a, {5, 7});
+        verify(b, {9});
+    };
+    check_rejected(a);
+    check_rejected(foreign);
+    verify(foreign, {8});
+
+    auto seq = tree.merge(std::move(a), std::move(empty), std::move(b),
+                          std::move(c), std::move(empty), tree.singleton(element(6)));
+    verify(seq, {5, 7, 9, 4, 5, 6});
+    CHECK(a.empty() && b.empty() && c.empty() && empty.empty());
+    CHECK(tree.merge(Sequence{}, Sequence{}, Sequence{}).empty());
+}
+
 void boundaries() {
     Tree tree(4096);
     auto empty = tree.build(std::vector<Value>{});
@@ -258,6 +289,7 @@ void skewed_merges() {
 int main() {
     empty_identity();
     export_elements();
+    merge_many();
     boundaries();
     randomized();
     skewed_merges();

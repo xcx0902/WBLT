@@ -9,6 +9,7 @@
 #include <new>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -111,7 +112,7 @@ public:
         return Sequence(this, build_nodes(first, static_cast<Index>(n)));
     }
 
-    // Consumes the inputs, leaving their handles empty. Both nonempty inputs
+    // Consumes the inputs, leaving their handles empty. Nonempty inputs
     // must have been built by this pool.
     Sequence merge(Sequence&& left, Sequence&& right) {
         check_owner(left);
@@ -122,6 +123,37 @@ public:
         const Index result = join(left.root_, right.root_);
         left.root_ = right.root_ = 0;
         return Sequence(this, result);
+    }
+
+    // Join three or more inputs from left to right.
+    template <class... Rest,
+              std::enable_if_t<(std::is_same_v<Rest, Sequence> && ...), int> = 0>
+    Sequence merge(Sequence&& first, Sequence&& second, Sequence&& third, Rest&&... rest) {
+        Sequence* const inputs[] = {&first, &second, &third, &rest...};
+        for (auto* seq : inputs) check_owner(*seq);
+
+        // Mark validated handles briefly to detect aliases in linear time.
+        // Restore every owner before joining or throwing.
+        bool repeated = false;
+        for (auto* seq : inputs) {
+            if (!seq->empty() && !std::exchange(seq->pool_, nullptr)) repeated = true;
+        }
+        for (auto* seq : inputs) {
+            if (!seq->empty()) seq->pool_ = this;
+        }
+        if (repeated) throw std::invalid_argument("WBLT self merge");
+
+        Sequence* result = nullptr;
+        for (auto* seq : inputs) {
+            if (seq->empty()) continue;
+            if (!result) {
+                result = seq;
+            } else {
+                result->root_ = join(result->root_, seq->root_);
+                seq->root_ = 0;
+            }
+        }
+        return result ? std::move(*result) : Sequence{};
     }
 
     // The first result contains exactly k elements.

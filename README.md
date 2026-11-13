@@ -17,8 +17,9 @@ F id() { return {1, 0}; }
 int main() {
     WBLT<S, op, e, F, mapping, composition, id> tree(4);
     auto a = tree.singleton({1, 1});
-    auto b = tree.build({{2, 1}, {3, 1}, {4, 1}});
-    auto seq = tree.merge(std::move(a), std::move(b));
+    auto b = tree.build({{2, 1}, {3, 1}});
+    auto c = tree.singleton({4, 1});
+    auto seq = tree.merge(std::move(a), std::move(b), std::move(c));
     seq.apply({2, 1});  // [3, 5, 7, 9]
     auto values = seq.to_vector();
     assert(values.size() == 4 && values[0].sum == 3 && values[3].sum == 9);
@@ -44,6 +45,7 @@ int main() {
 | `tree.singleton(value)` | 从一个 `S` 直接创建长度为 1 的序列 | 摊还 O(1)；容量已预留时 O(1) |
 | `tree.build(v)` 或 `tree.build(first, last)` | 从 `std::vector<S>` 或随机访问迭代器区间建树 | O(n) |
 | `tree.merge(std::move(l), std::move(r))` | 将 `r` 接到 `l` 后面 | O(1 + log(max(n,m) / min(n,m)))；空序列 O(1) |
+| `tree.merge(std::move(a), std::move(b), std::move(c), ...)` | 从左到右依次拼接，跳过空序列 | O(k) 检查 k 个参数，另加每次两序列拼接的成本 |
 | `tree.split(std::move(seq), k)` | 左侧保留前 `k` 个元素；允许 `k = 0` 或 `k = n` | O(log(n + 1)) |
 | `tree.split_by(std::move(seq), pred)` | `pred(element)` 为假的元素留在左侧，从首个为真的元素开始是右侧 | O(log(n + 1)) |
 | `tree.split_prefix(std::move(seq), pred)` | 对每个非空前缀的积判定；使判定首次为真的那个元素属于右侧 | O(log(n + 1)) |
@@ -54,7 +56,7 @@ int main() {
 
 两种谓词分裂都要求判定沿序列从假到真单调变化，也允许全假或全真。复杂度假定用户定义的运算、判定和类型拷贝等是 O(1)。每个分支的左右叶数之比至多为 3；拼接沿较重一侧下降并旋转恢复平衡，分裂沿一条路径下降并复用原有分支。
 
-每个 `WBLT` 实例管理自己的节点池，必须比从它建出的非空 `Sequence` 活得更久。拼接和分裂成功后会清空传入的句柄；两棵非空树只有来自同一个节点池才可以拼接。析构一个仍持有 `n` 个元素的句柄需要 O(n)，释放的槽位会被复用。池按块增长并保留已分配的块，直到池析构。已知同时存活元素数量上限时，可以用构造函数或 `reserve(n)` 提前分配，从而在该上限内避免池扩容；未预留时，建树和拼接的分配成本按摊还计算。单个池最多同时存放 2³¹ − 1 个元素。
+每个 `WBLT` 实例管理自己的节点池，必须比从它建出的非空 `Sequence` 活得更久。拼接和分裂成功后会清空传入的句柄；拼接的非空序列须来自同一个节点池，每个非空句柄只能传入一次。析构一个仍持有 `n` 个元素的句柄需要 O(n)，释放的槽位会被复用。池按块增长并保留已分配的块，直到池析构。已知同时存活元素数量上限时，可以用构造函数或 `reserve(n)` 提前分配，从而在该上限内避免池扩容；未预留时，建树和拼接的分配成本按摊还计算。单个池最多同时存放 2³¹ − 1 个元素。
 
 参考：[AtCoder Library: Lazy Segtree](https://atcoder.github.io/ac-library/production/document_en/lazysegtree.html)；[Joinable Parallel Balanced Binary Trees](https://www.cs.cmu.edu/~blelloch/papers/3512769.pdf) §4.3。
 
