@@ -57,6 +57,15 @@ public:
         size_type size() const noexcept { return root_ ? pool_->weight(root_) : 0; }
         S prod() const { return root_ ? pool_->product(root_) : e(); }
 
+        std::vector<S> to_vector() const {
+            std::vector<S> out;
+            if (root_) {
+                out.reserve(size());
+                pool_->append_elements(root_, nullptr, out);
+            }
+            return out;
+        }
+
         void apply(const F& f) {
             if (root_) pool_->apply_to(root_, f);
         }
@@ -74,6 +83,14 @@ public:
         if (capacity > max_slots) throw std::length_error("WBLT capacity");
         leaves_.reserve(capacity);
         branches_.reserve(capacity ? capacity - 1 : 0);
+    }
+
+    Sequence singleton(const S& value) {
+        return Sequence(this, make_leaf(value));
+    }
+
+    Sequence singleton(S&& value) {
+        return Sequence(this, make_leaf(std::move(value)));
     }
 
     Sequence build(const std::vector<S>& values) {
@@ -228,6 +245,11 @@ private:
     Pool<S> leaves_;
     Pool<Branch> branches_;
 
+    template <class Value>
+    Index make_leaf(Value&& value) {
+        return leaf_bit | leaves_.make(std::forward<Value>(value));
+    }
+
     static bool is_leaf(Index t) noexcept { return (t & leaf_bit) != 0; }
 
     Index weight(Index t) const noexcept {
@@ -240,6 +262,28 @@ private:
 
     const S& last_element(Index t) const noexcept {
         return is_leaf(t) ? leaves_[t ^ leaf_bit] : branches_[t].last;
+    }
+
+    void append_elements(Index t, const F* pending, std::vector<S>& out) const {
+        if (is_leaf(t)) {
+            const S& value = leaves_[t ^ leaf_bit];
+            if (pending) out.push_back(mapping(*pending, value));
+            else out.push_back(value);
+            return;
+        }
+        const Branch& b = branches_[t];
+        if (b.tag) {
+            if (pending) {
+                // An unpushed ancestor action is newer than the local tag.
+                const F combined = composition(*pending, *b.tag);
+                append_elements(b.left, std::addressof(combined), out);
+                append_elements(b.right, std::addressof(combined), out);
+                return;
+            }
+            pending = std::addressof(*b.tag);
+        }
+        append_elements(b.left, pending, out);
+        append_elements(b.right, pending, out);
     }
 
     void apply_to(Index t, const F& f) {
@@ -384,7 +428,7 @@ private:
 
     template <class RandomIt>
     Index build_nodes(RandomIt first, Index n) {
-        if (n == 1) return leaf_bit | leaves_.make(*first);
+        if (n == 1) return make_leaf(*first);
         const Index k = n / 2;
         const Index l = build_nodes(first, k);
         Index r = 0;

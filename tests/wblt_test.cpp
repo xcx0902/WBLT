@@ -94,6 +94,35 @@ void empty_identity() {
     CHECK(l.prod() == 0 && r.prod() == 0);
 }
 
+void export_elements() {
+    Tree tree;
+    const Sequence empty;
+    CHECK(empty.to_vector().empty());
+
+    auto left = build(tree, {1, 2, 3});
+    auto right = build(tree, {4, 5});
+    left.apply({2, 1});
+    auto seq = tree.merge(std::move(left), std::move(right));
+    seq.apply({3, 4});  // Root action is newer than the left child's action.
+
+    const auto check_values = [](const Sequence& s, const std::vector<U>& expected) {
+        auto values = s.to_vector();
+        CHECK(values.size() == expected.size());
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            CHECK(values[i].count == 1);
+            CHECK(values[i].sum == expected[i] && values[i].hash == expected[i]);
+        }
+    };
+    check_values(seq, {13, 19, 25, 16, 19});
+    verify(seq, {13, 19, 25, 16, 19});
+    check_values(seq, {13, 19, 25, 16, 19});
+
+    auto [l, r] = tree.split(std::move(seq), 1);
+    check_values(l, {13});
+    r.apply({1, 7});
+    check_values(r, {26, 32, 23, 26});
+}
+
 void boundaries() {
     Tree tree(4096);
     auto empty = tree.build(std::vector<Value>{});
@@ -127,7 +156,7 @@ void boundaries() {
         CHECK(l.empty() && r.empty());
     }
 
-    auto singleton = tree.build(std::vector<Value>{element(8)});
+    auto singleton = tree.singleton(element(8));
     auto [single_l, single_r] =
         tree.split_prefix(std::move(singleton), [](const Value& x) { return x.sum >= 8; });
     verify(single_l, {});
@@ -203,7 +232,7 @@ void skewed_merges() {
     std::vector<U> plain(n);
     for (std::size_t i = 0; i < n; ++i) {
         const auto value = element(i);
-        auto one = tree.build(&value, &value + 1);
+        auto one = tree.singleton(value);
         if (i % 2) {
             seq = tree.merge(std::move(seq), std::move(one));
             plain[n / 2 + i / 2] = i;
@@ -228,6 +257,7 @@ void skewed_merges() {
 
 int main() {
     empty_identity();
+    export_elements();
     boundaries();
     randomized();
     skewed_merges();

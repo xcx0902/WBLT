@@ -16,10 +16,12 @@ F id() { return {1, 0}; }
 
 int main() {
     WBLT<S, op, e, F, mapping, composition, id> tree(4);
-    auto a = tree.build({{1, 1}, {2, 1}});
-    auto b = tree.build({{3, 1}, {4, 1}});
+    auto a = tree.singleton({1, 1});
+    auto b = tree.build({{2, 1}, {3, 1}, {4, 1}});
     auto seq = tree.merge(std::move(a), std::move(b));
     seq.apply({2, 1});  // [3, 5, 7, 9]
+    auto values = seq.to_vector();
+    assert(values.size() == 4 && values[0].sum == 3 && values[3].sum == 9);
 
     auto [l, r] = tree.split(std::move(seq), 2);  // [3, 5] | [7, 9]
     seq = tree.merge(std::move(l), std::move(r));
@@ -39,6 +41,7 @@ int main() {
 
 | 操作 | 语义 | 时间 |
 | --- | --- | --- |
+| `tree.singleton(value)` | 从一个 `S` 直接创建长度为 1 的序列 | 摊还 O(1)；容量已预留时 O(1) |
 | `tree.build(v)` 或 `tree.build(first, last)` | 从 `std::vector<S>` 或随机访问迭代器区间建树 | O(n) |
 | `tree.merge(std::move(l), std::move(r))` | 将 `r` 接到 `l` 后面 | O(1 + log(max(n,m) / min(n,m)))；空序列 O(1) |
 | `tree.split(std::move(seq), k)` | 左侧保留前 `k` 个元素；允许 `k = 0` 或 `k = n` | O(log(n + 1)) |
@@ -46,6 +49,7 @@ int main() {
 | `tree.split_prefix(std::move(seq), pred)` | 对每个非空前缀的积判定；使判定首次为真的那个元素属于右侧 | O(log(n + 1)) |
 | `seq.apply(f)` | 对整个序列施加 `f`；空序列保持为空 | O(1) |
 | `seq.prod()` | 返回整个序列的积；空序列返回 `e()` | O(1) |
+| `seq.to_vector()` | 按顺序返回施加了所有延迟作用的元素；不修改原序列，空序列返回空向量 | O(n) |
 | `seq.size()`、`seq.empty()` | 查询长度或是否为空 | O(1) |
 
 两种谓词分裂都要求判定沿序列从假到真单调变化，也允许全假或全真。复杂度假定用户定义的运算、判定和类型拷贝等是 O(1)。每个分支的左右叶数之比至多为 3；拼接沿较重一侧下降并旋转恢复平衡，分裂沿一条路径下降并复用原有分支。
